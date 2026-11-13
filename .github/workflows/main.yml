@@ -1,0 +1,57 @@
+name: Build Debug APK
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Find and unzip project
+        run: |
+          if [ -f "tictactoe-dance-android.zip" ]; then
+            ZIP_FILE="tictactoe-dance-android.zip"
+          else
+            ZIP_FILE=$(find . -maxdepth 3 -name "*.zip" | head -n 1)
+          fi
+
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ZIP-архив не найден в проекте"
+            exit 1
+          fi
+
+          echo "Использую архив: $ZIP_FILE"
+          mkdir -p extracted
+          unzip -o "$ZIP_FILE" -d extracted
+
+          GRADLE_FILE=$(find extracted -maxdepth 3 \( -name "settings.gradle.kts" -o -name "settings.gradle" \) | head -n 1)
+          if [ -z "$GRADLE_FILE" ]; then
+            echo "Не найден settings.gradle(.kts) внутри архива"
+            exit 1
+          fi
+
+          PROJECT_DIR=$(dirname "$GRADLE_FILE")
+          echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.7'
+
+      - name: Build Debug APK
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: gradle assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/*.apk
